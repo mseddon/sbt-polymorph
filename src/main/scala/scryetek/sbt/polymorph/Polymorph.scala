@@ -112,7 +112,13 @@ object Polymorph extends AutoPlugin {
             val mainApp = kernelMainClass.value.get
             val link = collectLinkedFiles((managedClasspath in Compile).value)
             val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-            IO.write(file, s"$packageDecl\n\nobject $entryClass extends App {\n  $link\n  new polymorph.gl.impl.GLAppImpl(new $mainApp())\n}\n")
+            IO.write(file,
+              s"""$packageDecl
+                 |object $entryClass extends App {
+                 |  $link
+                 |  new polymorph.impl.AppImpl(new $mainApp).main(args)
+                 |}
+                 |""".stripMargin('|'))
             Seq(file)
           } else Seq()
         },
@@ -147,7 +153,18 @@ object Polymorph extends AutoPlugin {
             val file = (sourceManaged in Compile).value / (entryClass + ".scala")
             val link = collectLinkedFiles((managedClasspath in Compile).value)
 
-            IO.write(file, s"$packageDecl\n\nimport android.app.Activity\nimport android.os.Bundle\nimport polymorph.gl.impl.GLAppImpl\n\nclass $entryClass extends Activity {\n  val app = new GLAppImpl(new $mainApp())\n\n  override def onCreate(savedInstanceState: Bundle): Unit = {\n    $link\n  super.onCreate(savedInstanceState)\n    app.setActivity(this)\n  }\n}")
+            IO.write(file,
+              s"""$packageDecl
+                 |class $entryClass extends android.app.Activity {
+                 |  val app = new polymorph.impl.AppImpl(new $mainApp)
+                 |  override def onCreate(savedInstanceState: android.os.Bundle): Unit = {
+                 |    $link
+                 |    super.onCreate(savedInstanceState)
+                 |    app.setActivity(this)
+                 |    app.main()
+                 |  }
+                 |}
+                 |""".stripMargin('|'))
             Seq(file)
           } else
             Seq()
@@ -163,6 +180,7 @@ object Polymorph extends AutoPlugin {
       val cp = CrossProject(libraryName, dir, CrossType.Full)
           .settings(commonSettings: _*)
           .jsSettings(
+            persistLauncher := true,
             (generateEntrypoint in Compile) := {
 
               if(kernelBootClass.value.isDefined) {
@@ -170,7 +188,14 @@ object Polymorph extends AutoPlugin {
                 val mainApp = kernelMainClass.value.get
                 val link = collectLinkedFiles((managedClasspath in Compile).value)
                 val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-                IO.write(file, s"$packageDecl\n\nimport polymorph.gl.impl.GLAppImpl\nimport scala.scalajs.js.JSApp\n\nobject $entryClass extends JSApp {\n  def main(): Unit = {\n    $link\n    new GLAppImpl(new $mainApp()).main()\n  }\n}")
+                IO.write(file,
+                  s"""$packageDecl
+                     |object $entryClass extends scala.scalajs.js.JSApp {
+                     |  def main(): Unit = {
+                     |    $link
+                     |    new polymorph.impl.AppImpl(new $mainApp).main()
+                     |  }
+                     |}""".stripMargin('|'))
                 Seq(file)
               } else
                 Seq()
@@ -206,8 +231,13 @@ object Polymorph extends AutoPlugin {
                 val link = collectLinkedFiles((managedClasspath in Compile).value)
 
                 val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-                val out = s"$packageDecl\n\nobject $entryClass extends App {\n  $link\n  new polymorph.gl.impl.GLAppImpl(new $mainApp())\n}\n"
-                IO.write(file, out)
+                IO.write(file,
+                  s"""$packageDecl
+                     |object $entryClass extends scala.App {
+                     |  $link
+                     |  new polymorph.impl.AppImpl(new $mainApp).main(args)
+                     |}
+                     |""".stripMargin('|'))
                 Seq(file)
               } else
                 Seq()
