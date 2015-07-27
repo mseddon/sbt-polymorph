@@ -10,7 +10,7 @@ sbtPlugin := true
 
 addSbtPlugin("org.scala-js" % "sbt-scalajs" % "0.6.4")
 
-addSbtPlugin("com.hanhuy.sbt" % "android-sdk-plugin" % "1.4.6")
+addSbtPlugin("com.hanhuy.sbt" % "android-sdk-plugin" % "1.4.7")
 
 addSbtPlugin("org.roboscala" % "sbt-robovm" % "1.5.0-SNAPSHOT")
 

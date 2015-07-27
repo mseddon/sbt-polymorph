@@ -4,6 +4,7 @@ import java.util.Base64
 import java.util.zip.ZipFile
 import scala.collection.JavaConverters._
 import android.Keys._
+import android.Tasks._
 import org.scalajs.sbtplugin.ScalaJSPlugin
 import org.scalajs.sbtplugin.cross.CrossProject
 import sbt.Keys._
@@ -98,12 +99,18 @@ object Polymorph extends AutoPlugin {
         res
       }
 
-
       def collectLinkedFiles(files: Seq[Attributed[File]]): String =
         (for {
           f <- files
           linker <- getLinkerInfo(f.data)
-        } yield linker).map(_ + ".link").mkString("\n")
+        } yield linker).map(_ + ".link()").mkString("\n")
+
+      def collectLinkedFilesAndroid(files: Seq[File]): String =
+        (for {
+          f <- files
+          linker = f / "assets" / "linker.info"
+          linkerString = IO.read(linker) if linker.exists()
+        } yield linkerString).map(_ + ".link()").mkString("\n")
 
       val ios = RobovmProjects.iOSProject(libraryName+"IOS", dir / "ios").settings(commonSettings: _*).settings(
         (generateEntrypoint in Compile) := {
@@ -146,21 +153,22 @@ object Polymorph extends AutoPlugin {
         platformTarget in Android := "android-15",
         minSdkVersion in Android := "15",
         targetSdkVersion in Android := "15",
+
         (generateEntrypoint in Compile) := {
           if(kernelBootClass.value.isDefined) {
             val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
             val mainApp = kernelMainClass.value.get
             val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-            val link = collectLinkedFiles((managedClasspath in Compile).value)
-
+            val link = collectLinkedFilesAndroid((baseDirectory.value / "target" / "aars").listFiles())
             IO.write(file,
               s"""$packageDecl
                  |class $entryClass extends android.app.Activity {
                  |  val app = new polymorph.impl.AppImpl(new $mainApp)
                  |  override def onCreate(savedInstanceState: android.os.Bundle): Unit = {
+                 |    requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
+                 |    polymorph.impl.AppImpl.activity = this
                  |    $link
                  |    super.onCreate(savedInstanceState)
-                 |    app.setActivity(this)
                  |    app.main()
                  |  }
                  |}
@@ -169,8 +177,12 @@ object Polymorph extends AutoPlugin {
           } else
             Seq()
         },
+        (generateEntrypoint in Compile) <<= (generateEntrypoint in Compile) dependsOn (dependencyClasspath in Android),
         (collectResources in Android) <<= (collectResources in Android) dependsOn copyToAssets,
         copyToAssets := {
+          polymorphLinkerObject.value.foreach { linker =>
+            IO.write(baseDirectory.value / "src" / "main" / "assets" / "linker.info", linker)
+          }
           IO.copyDirectory(dir.getCanonicalFile/ "shared" / "src" / "main" / "resources", baseDirectory.value / "target" / "android-bin" / "assets", overwrite = true)
         },
         sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue,
