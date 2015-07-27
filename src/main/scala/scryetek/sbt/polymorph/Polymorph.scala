@@ -1,7 +1,8 @@
 package scryetek.sbt.polymorph
 
 import java.util.Base64
-
+import java.util.zip.ZipFile
+import scala.collection.JavaConverters._
 import android.Keys._
 import org.scalajs.sbtplugin.ScalaJSPlugin
 import org.scalajs.sbtplugin.cross.CrossProject
@@ -22,6 +23,7 @@ import sbtassembly.AssemblyKeys._
 object Polymorph extends AutoPlugin {
   lazy val kernelMainClass = settingKey[Option[String]]("The GLApp that this application is defined in")
   lazy val kernelBootClass = settingKey[Option[String]]("The name of the generated boot (main) class")
+  lazy val polymorphLinkerObject = settingKey[Option[String]]("The name of the linker class, if one exists")
 
   lazy val generateEntrypoint = taskKey[Seq[File]]("Generates the boot class class for a given platform")
   lazy val copyToAssets = taskKey[Unit]("Copies the assets")
@@ -30,7 +32,17 @@ object Polymorph extends AutoPlugin {
     scalacOptions in ThisBuild ++= Seq( "-target:jvm-1.7", "-deprecation", "-feature"),
     scalaVersion := "2.11.6",
     kernelMainClass := None,
-    kernelBootClass := None
+    kernelBootClass := None,
+    polymorphLinkerObject := None,
+    copyToAssets := {},
+    resourceGenerators in Compile <+=
+        (resourceManaged in Compile, polymorphLinkerObject) map { (dir: File, linker: Option[String]) =>
+            linker.map { linker =>
+              val file = dir / "linker.info"
+              IO.write(file, linker)
+              Seq(file)
+            }.getOrElse(Seq())
+    }
   )
 
   import ScalaJSPlugin.autoImport._
@@ -79,14 +91,28 @@ object Polymorph extends AutoPlugin {
 
   class PolymorphProjectBuilder(libraryName: String, library: Boolean) {
     def in(dir: java.io.File): PolymorphProjectSet = {
+      def getLinkerInfo(f: File): Option[String] = {
+        val z = new ZipFile(f)
+        val res = Option(z.getEntry("linker.info")).map(e => IO.readStream(z.getInputStream(e)))
+        z.close()
+        res
+      }
+
+
+      def collectLinkedFiles(files: Seq[Attributed[File]]): String =
+        (for {
+          f <- files
+          linker <- getLinkerInfo(f.data)
+        } yield linker).map(_ + ".link").mkString("\n")
+
       val ios = RobovmProjects.iOSProject(libraryName+"IOS", dir / "ios").settings(commonSettings: _*).settings(
         (generateEntrypoint in Compile) := {
           if(kernelBootClass.value.isDefined) {
             val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
             val mainApp = kernelMainClass.value.get
-
+            val link = collectLinkedFiles((managedClasspath in Compile).value)
             val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-            IO.write(file, s"$packageDecl\n\nobject $entryClass extends App {\n  new scryetek.gl.impl.GLAppImpl(new $mainApp())\n}\n")
+            IO.write(file, s"$packageDecl\n\nobject $entryClass extends App {\n  $link\n  new scryetek.gl.impl.GLAppImpl(new $mainApp())\n}\n")
             Seq(file)
           } else Seq()
         },
@@ -119,7 +145,9 @@ object Polymorph extends AutoPlugin {
             val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
             val mainApp = kernelMainClass.value.get
             val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-            IO.write(file, s"$packageDecl\n\nimport android.app.Activity\nimport android.os.Bundle\nimport scryetek.gl.impl.GLAppImpl\n\nclass $entryClass extends Activity {\n  val app = new GLAppImpl(new $mainApp())\n\n  override def onCreate(savedInstanceState: Bundle): Unit = {\n    super.onCreate(savedInstanceState)\n    app.setActivity(this)\n  }\n}")
+            val link = collectLinkedFiles((managedClasspath in Compile).value)
+
+            IO.write(file, s"$packageDecl\n\nimport android.app.Activity\nimport android.os.Bundle\nimport scryetek.gl.impl.GLAppImpl\n\nclass $entryClass extends Activity {\n  val app = new GLAppImpl(new $mainApp())\n\n  override def onCreate(savedInstanceState: Bundle): Unit = {\n    $link\n  super.onCreate(savedInstanceState)\n    app.setActivity(this)\n  }\n}")
             Seq(file)
           } else
             Seq()
@@ -136,34 +164,37 @@ object Polymorph extends AutoPlugin {
           .settings(commonSettings: _*)
           .jsSettings(
             (generateEntrypoint in Compile) := {
+
               if(kernelBootClass.value.isDefined) {
                 val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
                 val mainApp = kernelMainClass.value.get
-
+                val link = collectLinkedFiles((managedClasspath in Compile).value)
                 val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-                IO.write(file, s"$packageDecl\n\nimport scryetek.gl.impl.GLAppImpl\nimport scala.scalajs.js.JSApp\n\nobject $entryClass extends JSApp {\n  def main(): Unit = {\n    new GLAppImpl(new $mainApp()).main()\n  }\n}")
+                IO.write(file, s"$packageDecl\n\nimport scryetek.gl.impl.GLAppImpl\nimport scala.scalajs.js.JSApp\n\nobject $entryClass extends JSApp {\n  def main(): Unit = {\n    $link\n    new GLAppImpl(new $mainApp()).main()\n  }\n}")
                 Seq(file)
               } else
                 Seq()
             },
-            publish <<= publish.dependsOn(copyToAssets),
             (fastOptJS in Compile) <<= (fastOptJS in Compile).dependsOn(copyToAssets),
             (fullOptJS in Compile) <<= (fullOptJS in Compile).dependsOn(copyToAssets),
-            copyToAssets := {
-              val resourceFile =  organization.value + "-" + name.value + "-" +version.value + ".js"
-              var out = "//\n"
-              try {
-                val files = recurseDirectory(dir.getCanonicalFile / "shared" / "src" / "main" / "resources")
-                if (files.nonEmpty) {
-                  out += "var nxResources = nxResources ? nxResources : {};\n"
-                  for ((file, name) <- files) {
-                    out += "nxResources['" + name.replaceAll("'", "\\'") + "'] = '" + Base64.getEncoder.encodeToString(IO.readBytes(file)) + "';\n"
+            (resourceGenerators in Compile) <+= (resourceManaged in Compile, organization, name, version) map {
+              (outDir, organization, name, version) =>
+                val resourceFile =  organization+ "-" + name+ "-" +version+ ".js"
+                var out = "//\n"
+                try {
+                  val files = recurseDirectory(dir.getCanonicalFile / "shared" / "src" / "main" / "resources")
+                  if (files.nonEmpty) {
+                    out += "var nxResources = nxResources ? nxResources : {};\n"
+                    for ((file, name) <- files) {
+                      out += "nxResources['" + name.replaceAll("'", "\\'") + "'] = '" + Base64.getEncoder.encodeToString(IO.readBytes(file)) + "';\n"
+                    }
                   }
+                } catch {
+                  case e: Throwable =>
                 }
-              } catch {
-                case e: Throwable =>
-              }
-              IO.write((resourceDirectory in Compile).value / resourceFile, out)
+                val outFile = outDir / resourceFile
+                IO.write(outFile, out)
+                Seq(outFile)
             },
             jsDependencies += ProvidedJS / (organization.value + "-" + name.value + "-" + version.value + ".js"),
             sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue
@@ -172,9 +203,10 @@ object Polymorph extends AutoPlugin {
               if (kernelBootClass.value.isDefined) {
                 val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
                 val mainApp = kernelMainClass.value.get
+                val link = collectLinkedFiles((managedClasspath in Compile).value)
 
                 val file = (sourceManaged in Compile).value / (entryClass + ".scala")
-                val out = s"$packageDecl\n\nobject $entryClass extends App {\n  new scryetek.gl.impl.GLAppImpl(new $mainApp())\n}\n"
+                val out = s"$packageDecl\n\nobject $entryClass extends App {\n  $link\n  new scryetek.gl.impl.GLAppImpl(new $mainApp())\n}\n"
                 IO.write(file, out)
                 Seq(file)
               } else
@@ -219,6 +251,8 @@ object Polymorph extends AutoPlugin {
   object autoImport {
     val kernelMainClass = Polymorph.kernelMainClass
     val kernelBootClass = Polymorph.kernelBootClass
+    val polymorphLinkerObject = Polymorph.polymorphLinkerObject
+
     def polylib(id: ModuleID): ModuleID =
       id.copy(name = "polymorph@" + id.name)
     def polymorphApplication: PolymorphProjectBuilder = macro polymorphApplication_impl
