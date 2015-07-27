@@ -77,9 +77,9 @@ object Polymorph extends AutoPlugin {
   }
 
 
-  class PolymorphProjectBuilder(name: String, library: Boolean) {
+  class PolymorphProjectBuilder(libraryName: String, library: Boolean) {
     def in(dir: java.io.File): PolymorphProjectSet = {
-      val ios = RobovmProjects.iOSProject(name+"IOS", dir / "ios").settings(commonSettings: _*).settings(
+      val ios = RobovmProjects.iOSProject(libraryName+"IOS", dir / "ios").settings(commonSettings: _*).settings(
         (generateEntrypoint in Compile) := {
           if(kernelBootClass.value.isDefined) {
             val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
@@ -108,7 +108,7 @@ object Polymorph extends AutoPlugin {
         loop(base)
       }
 
-      val ap = Project(name+"Android", dir / "android").settings(
+      val ap = Project(libraryName+"Android", dir / "android").settings(
         commonSettings,
         if(library) android.Plugin.androidBuildAar else android.Plugin.androidBuild,
         platformTarget in Android := "android-15",
@@ -132,7 +132,7 @@ object Polymorph extends AutoPlugin {
         unmanagedSourceDirectories in Compile += dir.getAbsoluteFile / "shared" / "src" / "main" / "scala"
       )
 
-      val cp = CrossProject(name, dir, CrossType.Full)
+      val cp = CrossProject(libraryName, dir, CrossType.Full)
           .settings(commonSettings: _*)
           .jsSettings(
             (generateEntrypoint in Compile) := {
@@ -146,21 +146,26 @@ object Polymorph extends AutoPlugin {
               } else
                 Seq()
             },
+            publish <<= publish.dependsOn(copyToAssets),
             (fastOptJS in Compile) <<= (fastOptJS in Compile).dependsOn(copyToAssets),
             (fullOptJS in Compile) <<= (fullOptJS in Compile).dependsOn(copyToAssets),
             copyToAssets := {
-              val resourceFile = name + "-" +organization.value + "-" + version.value + ".js"
-              val files = recurseDirectory(dir.getCanonicalFile / "shared" / "src" / "main" / "resources")
-              var out = ""
-              if (files.nonEmpty) {
-                out += "var nxResources = nxResources ? nxResources : {};\n"
-                for ((file, name) <- files) {
-                  out += "nxResources['" + name.replaceAll("'", "\\'") + "'] = '" + Base64.getEncoder.encodeToString(IO.readBytes(file)) + "';\n"
+              val resourceFile =  organization.value + "-" + name.value + "-" +version.value + ".js"
+              var out = "//\n"
+              try {
+                val files = recurseDirectory(dir.getCanonicalFile / "shared" / "src" / "main" / "resources")
+                if (files.nonEmpty) {
+                  out += "var nxResources = nxResources ? nxResources : {};\n"
+                  for ((file, name) <- files) {
+                    out += "nxResources['" + name.replaceAll("'", "\\'") + "'] = '" + Base64.getEncoder.encodeToString(IO.readBytes(file)) + "';\n"
+                  }
                 }
+              } catch {
+                case e: Throwable =>
               }
               IO.write((resourceDirectory in Compile).value / resourceFile, out)
             },
-            jsDependencies += ProvidedJS / (name + "-" +organization.value + "-" + version.value + ".js"),
+            jsDependencies += ProvidedJS / (organization.value + "-" + name.value + "-" + version.value + ".js"),
             sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue
           ).jvmSettings(
             (generateEntrypoint in Compile) := {
