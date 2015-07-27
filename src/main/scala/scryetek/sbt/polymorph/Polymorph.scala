@@ -226,6 +226,7 @@ object Polymorph extends AutoPlugin {
             jsDependencies += ProvidedJS / (organization.value + "-" + name.value + "-" + version.value + ".js"),
             sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue
           ).jvmSettings(
+            fork in (Compile, run) := true,
             (generateEntrypoint in Compile) := {
               if (kernelBootClass.value.isDefined) {
                 val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
