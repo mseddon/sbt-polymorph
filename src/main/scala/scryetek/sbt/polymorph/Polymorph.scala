@@ -192,8 +192,10 @@ object Polymorph extends AutoPlugin {
                   s"""$packageDecl
                      |object $entryClass extends scala.scalajs.js.JSApp {
                      |  def main(): Unit = {
-                     |    $link
-                     |    new polymorph.impl.AppImpl(new $mainApp).main()
+                     |    org.scalajs.dom.document.addEventListener("DOMContentLoaded", { e: org.scalajs.dom.Event =>
+                     |      $link
+                     |      new polymorph.impl.AppImpl(new $mainApp).main()
+                     |    })
                      |  }
                      |}""".stripMargin('|'))
                 Seq(file)
