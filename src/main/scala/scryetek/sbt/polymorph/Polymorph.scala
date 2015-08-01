@@ -188,6 +188,9 @@ object Polymorph extends AutoPlugin {
           }
           IO.copyDirectory(dir.getCanonicalFile/ "shared" / "src" / "main" / "resources", baseDirectory.value / "target" / "android-bin" / "assets", overwrite = true)
           IO.copyDirectory(dir.getCanonicalFile/ "shared" / "src" / "main" / "resources", baseDirectory.value / "bin" / "assets", overwrite = true)
+          // remove spurious linker.info files that we copied as well.
+          IO.delete(baseDirectory.value / "bin" / "assets" / "linker.info")
+          IO.delete(baseDirectory.value / "bin" / "assets" / "linker.info")
         },
         sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue,
         unmanagedSourceDirectories in Compile += dir.getAbsoluteFile / "shared" / "src" / "main" / "scala",
