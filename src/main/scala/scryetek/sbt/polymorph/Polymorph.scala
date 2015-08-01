@@ -62,7 +62,7 @@ object Polymorph extends AutoPlugin {
 
     def filterSettingsAndroid(project: Project): Project =
       project.settings(libraryDependencies := libraryDependencies.value.flatMap {
-        case e: ModuleID if e.name.contains("polymorph@") =>
+        case e: ModuleID if e.name.startsWith("polymorph@") =>
           Seq(aar(e.copy(name = e.name.substring(10) + "-android")))
         case e: ModuleID =>
           Seq(e)
@@ -70,7 +70,7 @@ object Polymorph extends AutoPlugin {
 
     def filterSettings(project: Project, postfix: String = ""): Project =
       project.settings(libraryDependencies := libraryDependencies.value.flatMap {
-        case e: ModuleID if e.name.contains("polymorph@") =>
+        case e: ModuleID if e.name.startsWith("polymorph@") =>
           Seq(e.copy(name = e.name.substring(10) + postfix))
         case e: ModuleID =>
           Seq(e)
@@ -156,6 +156,7 @@ object Polymorph extends AutoPlugin {
         platformTarget in Android := "android-15",
         minSdkVersion in Android := "15",
         targetSdkVersion in Android := "15",
+        crossPaths := true,
         (generateEntrypoint in Compile) := {
           if(kernelBootClass.value.isDefined) {
             val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
@@ -188,7 +189,8 @@ object Polymorph extends AutoPlugin {
           IO.copyDirectory(dir.getCanonicalFile/ "shared" / "src" / "main" / "resources", baseDirectory.value / "target" / "android-bin" / "assets", overwrite = true)
         },
         sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue,
-        unmanagedSourceDirectories in Compile += dir.getAbsoluteFile / "shared" / "src" / "main" / "scala"
+        unmanagedSourceDirectories in Compile += dir.getAbsoluteFile / "shared" / "src" / "main" / "scala",
+        unmanagedSourceDirectories in Android += dir.getAbsoluteFile / "shared" / "src" / "main" / "scala"
       )
 
       val cp = CrossProject(libraryName, dir, CrossType.Full)
