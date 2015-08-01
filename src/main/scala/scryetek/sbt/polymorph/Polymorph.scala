@@ -187,6 +187,7 @@ object Polymorph extends AutoPlugin {
             IO.write(baseDirectory.value / "src" / "main" / "assets" / "linker.info", linker)
           }
           IO.copyDirectory(dir.getCanonicalFile/ "shared" / "src" / "main" / "resources", baseDirectory.value / "target" / "android-bin" / "assets", overwrite = true)
+          IO.copyDirectory(dir.getCanonicalFile/ "shared" / "src" / "main" / "resources", baseDirectory.value / "bin" / "assets", overwrite = true)
         },
         sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue,
         unmanagedSourceDirectories in Compile += dir.getAbsoluteFile / "shared" / "src" / "main" / "scala",
