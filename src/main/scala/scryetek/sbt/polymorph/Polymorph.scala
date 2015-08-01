@@ -57,30 +57,24 @@ object Polymorph extends AutoPlugin {
   case class PolymorphProjectSet(private val _ios: Project, private val _android: Project, private val crossProject: CrossProject) {
     lazy val js = filterSettings(crossProject.js)
     lazy val jvm = filterSettings(crossProject.jvm)
-    lazy val ios = filterSettings(_ios, "-ios")
-    lazy val android = filterSettingsAndroid(_android)
+    lazy val ios = filterSettings(_ios, "-ios").settings(name := name.value + "-ios")
+    lazy val android = filterSettingsAndroid(_android).settings(name := name.value + "-android")
 
-    def filterSettingsAndroid(project: Project): Project = {
+    def filterSettingsAndroid(project: Project): Project =
       project.settings(libraryDependencies := libraryDependencies.value.flatMap {
         case e: ModuleID if e.name.contains("polymorph@") =>
           Seq(aar(e.copy(name = e.name.substring(10) + "-android")))
         case e: ModuleID =>
           Seq(e)
-      },
-        name := name.value + "-android"
-      )
-    }
+      })
 
-    def filterSettings(project: Project, postfix: String = ""): Project = {
+    def filterSettings(project: Project, postfix: String = ""): Project =
       project.settings(libraryDependencies := libraryDependencies.value.flatMap {
-          case e: ModuleID if e.name.contains("polymorph@") =>
-            Seq(e.copy(name = e.name.substring(10) + postfix))
-          case e: ModuleID =>
-            Seq(e)
-        },
-        name := name.value + postfix
-      )
-    }
+        case e: ModuleID if e.name.contains("polymorph@") =>
+          Seq(e.copy(name = e.name.substring(10) + postfix))
+        case e: ModuleID =>
+          Seq(e)
+      })
 
     def settings(ss: Def.Setting[_]*): PolymorphProjectSet =
       copy(_ios.settings(ss: _*), _android.settings(ss: _*), crossProject.settings(ss: _*))
@@ -162,7 +156,6 @@ object Polymorph extends AutoPlugin {
         platformTarget in Android := "android-15",
         minSdkVersion in Android := "15",
         targetSdkVersion in Android := "15",
-
         (generateEntrypoint in Compile) := {
           if(kernelBootClass.value.isDefined) {
             val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
