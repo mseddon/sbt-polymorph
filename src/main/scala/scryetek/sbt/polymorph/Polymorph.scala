@@ -58,14 +58,23 @@ object Polymorph extends AutoPlugin {
     lazy val js = filterSettings(crossProject.js)
     lazy val jvm = filterSettings(crossProject.jvm)
     lazy val ios = filterSettings(_ios, "-ios")
-    lazy val android = filterSettings(_android, "-android")
+    lazy val android = filterSettingsAndroid(_android)
+
+    def filterSettingsAndroid(project: Project): Project = {
+      project.settings(libraryDependencies := libraryDependencies.value.flatMap {
+        case e: ModuleID if e.name.contains("polymorph@") =>
+          Seq(aar(e.copy(name = e.name.substring(10) + "-android")))
+        case e: ModuleID =>
+          Seq(e)
+      },
+        name := name.value + "-android"
+      )
+    }
 
     def filterSettings(project: Project, postfix: String = ""): Project = {
       project.settings(libraryDependencies := libraryDependencies.value.flatMap {
           case e: ModuleID if e.name.contains("polymorph@") =>
             Seq(e.copy(name = e.name.substring(10) + postfix))
-          case e: ModuleID if e.name.contains("polymorph@") =>
-            Seq(e.copy(name= e.name.substring(10)))
           case e: ModuleID =>
             Seq(e)
         },
@@ -272,7 +281,7 @@ object Polymorph extends AutoPlugin {
             sourceGenerators in Compile += (generateEntrypoint in Compile).taskValue,
             mainClass in assembly := kernelBootClass.value
           )
-      new PolymorphProjectSet(ios.enablePlugins(Polymorph), ap.enablePlugins(Polymorph), cp.enablePlugins(Polymorph))
+      new PolymorphProjectSet(ios, ap, cp)
     }
   }
 
