@@ -31,7 +31,7 @@ object Polymorph extends AutoPlugin {
 
   lazy val commonSettings =  Seq(
     scalacOptions in ThisBuild ++= Seq( "-target:jvm-1.7", "-deprecation", "-feature"),
-    scalaVersion := "2.11.6",
+    scalaVersion := "2.11.7",
     kernelMainClass := None,
     kernelBootClass := None,
     polymorphLinkerObject := None,
@@ -112,7 +112,8 @@ object Polymorph extends AutoPlugin {
         (for {
           f <- files
           linker = f / "assets" / "linker.info"
-          linkerString = IO.read(linker) if linker.exists()
+          if linker.exists()
+          linkerString = IO.read(linker)
         } yield linkerString).map(_ + ".link()").mkString("\n")
 
       val ios = RobovmProjects.iOSProject(libraryName+"IOS", dir / "ios").settings(commonSettings: _*).settings(
@@ -120,7 +121,7 @@ object Polymorph extends AutoPlugin {
           if(kernelBootClass.value.isDefined) {
             val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
             val mainApp = kernelMainClass.value.get
-            val link = collectLinkedFiles((managedClasspath in Compile).value)
+            val link = collectLinkedFiles((managedClasspath in Runtime).value)
             val file = (sourceManaged in Compile).value / (entryClass + ".scala")
             IO.write(file,
               s"""$packageDecl
@@ -209,7 +210,7 @@ object Polymorph extends AutoPlugin {
               if(kernelBootClass.value.isDefined) {
                 val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
                 val mainApp = kernelMainClass.value.get
-                val link = collectLinkedFiles((managedClasspath in Compile).value)
+                val link = collectLinkedFiles((managedClasspath in Runtime).value)
                 val file = (sourceManaged in Compile).value / (entryClass + ".scala")
                 IO.write(file,
                   s"""$packageDecl
@@ -254,7 +255,7 @@ object Polymorph extends AutoPlugin {
               if (kernelBootClass.value.isDefined) {
                 val (packageDecl, entryClass) = getPackageAndClass(kernelBootClass.value.get)
                 val mainApp = kernelMainClass.value.get
-                val link = collectLinkedFiles((managedClasspath in Compile).value)
+                val link = collectLinkedFiles((managedClasspath in Runtime).value)
 
                 val file = (sourceManaged in Compile).value / (entryClass + ".scala")
                 IO.write(file,
