@@ -142,7 +142,7 @@ object Polymorph extends AutoPlugin {
         def loop(dir: java.io.File): Seq[(java.io.File, String)] =
           dir.listFiles() flatMap { file =>
             if (file.isDirectory)
-              recurseDirectory(file)
+              loop(file)
             else {
               val resource = file.getCanonicalPath.substring(base.getCanonicalPath.length)
               Seq((file, resource.replaceAll("\\\\", "/")))
