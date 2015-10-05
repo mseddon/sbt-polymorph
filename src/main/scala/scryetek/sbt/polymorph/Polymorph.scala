@@ -185,6 +185,7 @@ object Polymorph extends AutoPlugin {
         (generateEntrypoint in Compile) <<= (generateEntrypoint in Compile) dependsOn (dependencyClasspath in Android),
         (collectResources in Android) <<= (collectResources in Android) dependsOn copyToAssets,
         copyToAssets := {
+          IO.delete(baseDirectory.value / "src" / "main" / "assets" / "linker.info")
           polymorphLinkerObject.value.foreach { linker =>
             IO.write(baseDirectory.value / "src" / "main" / "assets" / "linker.info", linker)
           }
